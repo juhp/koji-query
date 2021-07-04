@@ -57,10 +57,10 @@ program muser mdate = do
     printTask :: Struct -> IO ()
     printTask task = do
       putStrLn ""
-      whenJust (render task) (mapM_ putStrLn)
+      whenJust (taskLines task) (mapM_ putStrLn)
 
-    render :: Struct -> Maybe [String]
-    render st = do
+    taskLines :: Struct -> Maybe [String]
+    taskLines st = do
       arch <- lookupStruct "arch" st
       completion_time <- lookupStruct "completion_time" st
       start_time <- lookupStruct "start_time" st
