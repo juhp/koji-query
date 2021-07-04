@@ -68,9 +68,13 @@ program muser mdate = do
       method <- lookupStruct "method" st
       state <- getTaskState st
       request <- head <$> lookupStruct "request" st >>= getString
-      let parent = lookupStruct "parent" st :: Maybe Int
+      let package =
+            if method == "buildArch"
+            then removeSuffix ".src.rpm" (takeFileName request) <.> arch
+            else takeFileName request
+          parent = lookupStruct "parent" st :: Maybe Int
       return $
-        [takeFileName request +-+ method +-+ (if method == "build" then "" else arch) +-+ show state +-+ maybe "" show parent,
+        [package +-+ method +-+ show state +-+ maybe "" show parent,
          "https://koji.fedoraproject.org/koji/taskinfo?taskID=" ++ show (taskid :: Int),
          start_time, completion_time
         ]
