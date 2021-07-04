@@ -65,11 +65,12 @@ program muser mdate = do
       completion_time <- lookupStruct "completion_time" st
       start_time <- lookupStruct "start_time" st
       taskid <- lookupStruct "id" st
+      method <- lookupStruct "method" st
       state <- getTaskState st
       request <- head <$> lookupStruct "request" st >>= getString
       let parent = lookupStruct "parent" st :: Maybe Int
       return $
-        [takeFileName request +-+ arch +-+ show state +-+ maybe "" show parent,
+        [takeFileName request +-+ method +-+ (if method == "build" then "" else arch) +-+ show state +-+ maybe "" show parent,
          "https://koji.fedoraproject.org/koji/taskinfo?taskID=" ++ show (taskid :: Int),
          start_time, completion_time
         ]
