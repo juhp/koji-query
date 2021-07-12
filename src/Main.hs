@@ -19,6 +19,9 @@ import Data.Maybe
 -- import Data.Monoid ((<>))
 -- #endif
 -- import qualified Data.Text as T
+import Data.Time.Clock
+import Data.Time.Format
+import Data.Time.LocalTime
 import Distribution.Koji
 import Distribution.Koji.API
 import SimpleCmd
@@ -45,6 +48,7 @@ program muser limit archs mdate = do
                 Just fas -> return fas
                 Nothing -> error' "Could not determine FAS id from klist"
   mowner <- kojiGetUserID fedoraKojiHub user
+  tz <- getCurrentTimeZone
   case mowner of
     Nothing -> error "No owner found"
     Just owner -> do
@@ -55,21 +59,25 @@ program muser limit archs mdate = do
          ("decode", ValueBool True)]
         ++ [("arch", ValueArray (map ValueString archs)) | notNull archs])
         [("limit",ValueInt limit)]
-        >>= mapM_ printTask
+        >>= mapM_ (printTask tz)
   where
-    printTask :: Struct -> IO ()
-    printTask task = do
+    printTask :: TimeZone -> Struct -> IO ()
+    printTask tz task = do
       putStrLn ""
-      whenJust (taskLines task) (mapM_ putStrLn)
+      whenJust (taskLines tz task) (mapM_ putStrLn)
 
-    taskLines :: Struct -> Maybe [String]
-    taskLines st = do
+    readTime' :: String -> UTCTime
+    readTime' = read . replace "+00:00" "Z"
+
+    taskLines :: TimeZone -> Struct -> Maybe [String]
+    taskLines tz st = do
       arch <- lookupStruct "arch" st
-      completion_time <- lookupStruct "completion_time" st
-      start_time <- lookupStruct "start_time" st
+      completion_time <- readTime' <$> lookupStruct "completion_time" st
+      start_time <- readTime' <$> lookupStruct "start_time" st
       taskid <- lookupStruct "id" st
       method <- lookupStruct "method" st
       state <- getTaskState st
+      let duration = diffUTCTime completion_time start_time
       request <- head <$> lookupStruct "request" st >>= getString
       let package =
             if method == "buildArch"
@@ -79,5 +87,7 @@ program muser limit archs mdate = do
       return $
         [package +-+ method +-+ show state +-+ maybe "" show parent,
          "https://koji.fedoraproject.org/koji/taskinfo?taskID=" ++ show (taskid :: Int),
-         start_time, completion_time
+         formatTime defaultTimeLocale "%c" (utcToLocalTime tz start_time),
+         formatTime defaultTimeLocale "%c" (utcToLocalTime tz completion_time),
+         "duration: " ++ formatTime defaultTimeLocale "%H:%M:%S" duration
         ]
