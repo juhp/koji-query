@@ -58,7 +58,7 @@ program muser limit archs mdate = do
          ("startedAfter", ValueString date),
          ("decode", ValueBool True)]
         ++ [("arch", ValueArray (map ValueString archs)) | notNull archs])
-        [("limit",ValueInt limit)]
+        [("limit",ValueInt limit), ("order", ValueString "id")]
         >>= mapM_ (printTask tz)
   where
     printTask :: TimeZone -> Struct -> IO ()
