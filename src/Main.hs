@@ -61,13 +61,12 @@ program muser limit archs mdate = do
     taskLines :: TimeZone -> Struct -> Maybe [String]
     taskLines tz st = do
       arch <- lookupStruct "arch" st
-      completion_time <- readTime' <$> lookupStruct "completion_time" st
       start_time <- readTime' <$> lookupStruct "start_time" st
+      let mcompletion_time = readTime' <$> lookupStruct "completion_time" st
       taskid <- lookupStruct "id" st
       method <- lookupStruct "method" st
       state <- getTaskState st
 #if MIN_VERSION_time(1,9,1)
-      let duration = diffUTCTime completion_time start_time
 #endif
       request <- head <$> lookupStruct "request" st >>= getString
       let package =
@@ -76,11 +75,16 @@ program muser limit archs mdate = do
             else takeFileName request
           parent = lookupStruct "parent" st :: Maybe Int
       return $
-        [ package +-+ method +-+ show state +-+ maybe "" show parent
-        , "https://koji.fedoraproject.org/koji/taskinfo?taskID=" ++ show (taskid :: Int)
-        , formatTime defaultTimeLocale "%c" (utcToLocalTime tz start_time)
-        , formatTime defaultTimeLocale "%c" (utcToLocalTime tz completion_time)
+        [package +-+ method +-+ show state +-+ maybe "" show parent,
+         "https://koji.fedoraproject.org/koji/taskinfo?taskID=" ++ show (taskid :: Int),
+         formatTime defaultTimeLocale "%c" (utcToLocalTime tz start_time)]
+         ++
+         case mcompletion_time of
+           Nothing -> []
+           Just c_t ->
+             [formatTime defaultTimeLocale "%c" (utcToLocalTime tz c_t)]
 #if MIN_VERSION_time(1,9,1)
-        , "duration: " ++ formatTime defaultTimeLocale "%H:%M:%S" duration
+             ++
+             let dur = diffUTCTime c_t start_time
+             in ["duration: " ++ formatTime defaultTimeLocale "%H:%M:%S" dur]
 #endif
-        ]
