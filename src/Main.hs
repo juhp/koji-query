@@ -4,21 +4,10 @@
 
 module Main (main) where
 
-
--- SPDX-License-Identifier: BSD-3-Clause
-
--- #if !MIN_VERSION_base(4,8,0)
--- import Control.Applicative ((<$>), (<*>))
--- #endif
 import Control.Monad.Extra
 
--- import Data.List (sortOn)
 import Data.List.Extra
 import Data.Maybe
--- #if !MIN_VERSION_base(4,11,0)
--- import Data.Monoid ((<>))
--- #endif
--- import qualified Data.Text as T
 import Data.Time.Clock
 import Data.Time.Format
 import Data.Time.LocalTime
