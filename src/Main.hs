@@ -1,9 +1,9 @@
+{-# LANGUAGE CPP #-}
+
 -- SPDX-License-Identifier: BSD-3-Clause
 
 module Main (main) where
 
-{-# LANGUAGE CPP #-}
-{-# LANGUAGE OverloadedStrings #-}
 
 -- SPDX-License-Identifier: BSD-3-Clause
 
@@ -77,7 +77,9 @@ program muser limit archs mdate = do
       taskid <- lookupStruct "id" st
       method <- lookupStruct "method" st
       state <- getTaskState st
+#if MIN_VERSION_time(1,9,1)
       let duration = diffUTCTime completion_time start_time
+#endif
       request <- head <$> lookupStruct "request" st >>= getString
       let package =
             if method == "buildArch"
@@ -85,9 +87,11 @@ program muser limit archs mdate = do
             else takeFileName request
           parent = lookupStruct "parent" st :: Maybe Int
       return $
-        [package +-+ method +-+ show state +-+ maybe "" show parent,
-         "https://koji.fedoraproject.org/koji/taskinfo?taskID=" ++ show (taskid :: Int),
-         formatTime defaultTimeLocale "%c" (utcToLocalTime tz start_time),
-         formatTime defaultTimeLocale "%c" (utcToLocalTime tz completion_time),
-         "duration: " ++ formatTime defaultTimeLocale "%H:%M:%S" duration
+        [ package +-+ method +-+ show state +-+ maybe "" show parent
+        , "https://koji.fedoraproject.org/koji/taskinfo?taskID=" ++ show (taskid :: Int)
+        , formatTime defaultTimeLocale "%c" (utcToLocalTime tz start_time)
+        , formatTime defaultTimeLocale "%c" (utcToLocalTime tz completion_time)
+#if MIN_VERSION_time(1,9,1)
+        , "duration: " ++ formatTime defaultTimeLocale "%H:%M:%S" duration
+#endif
         ]
