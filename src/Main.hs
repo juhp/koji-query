@@ -30,11 +30,12 @@ main =
   simpleCmdArgs' Nothing "koji-query" "Helper client for koji queries" $
   program
   <$> optional (strOptionWith 'u' "user" "USER" "Koji user")
+  <*> optionalWith auto 'l' "limit" "NUMTASKS" "Maximum number of tasks to show [default: 20]" 20
   <*> many (strOptionWith 'a' "arch" "ARCH" "Task arch")
   <*> optional (strArg "DAY")
 
-program :: Maybe String -> [String] -> Maybe String -> IO ()
-program muser archs mdate = do
+program :: Maybe String -> Int -> [String] -> Maybe String -> IO ()
+program muser limit archs mdate = do
   date <- cmd "date" ["+%F", "--date=" ++ fromMaybe "yesterday" mdate]
   user <- case muser of
             Just user -> return user
@@ -53,7 +54,7 @@ program muser archs mdate = do
          ("startedAfter", ValueString date),
          ("decode", ValueBool True)]
         ++ [("arch", ValueArray (map ValueString archs)) | notNull archs])
-        [("limit",ValueInt 10)]
+        [("limit",ValueInt limit)]
         >>= mapM_ printTask
   where
     printTask :: Struct -> IO ()
