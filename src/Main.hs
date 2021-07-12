@@ -28,12 +28,13 @@ import System.FilePath
 main :: IO ()
 main =
   simpleCmdArgs' Nothing "koji-query" "Helper client for koji queries" $
-  program <$>
-  optional (strOptionWith 'u' "user" "USER" "Koji user")
+  program
+  <$> optional (strOptionWith 'u' "user" "USER" "Koji user")
+  <*> many (strOptionWith 'a' "arch" "ARCH" "Task arch")
   <*> optional (strArg "DAY")
 
-program :: Maybe String -> Maybe String -> IO ()
-program muser mdate = do
+program :: Maybe String -> [String] -> Maybe String -> IO ()
+program muser archs mdate = do
   date <- cmd "date" ["+%F", "--date=" ++ fromMaybe "yesterday" mdate]
   user <- case muser of
             Just user -> return user
@@ -47,10 +48,11 @@ program muser mdate = do
     Nothing -> error "No owner found"
     Just owner -> do
       listTasks fedoraKojiHub
-        [--("method", ValueString "build"),
+        ([--("method", ValueString "build"),
          ("owner", ValueInt (getID owner)),
          ("startedAfter", ValueString date),
          ("decode", ValueBool True)]
+        ++ [("arch", ValueArray (map ValueString archs)) | notNull archs])
         [("limit",ValueInt 10)]
         >>= mapM_ printTask
   where
