@@ -86,5 +86,5 @@ program muser limit archs mdate = do
 #if MIN_VERSION_time(1,9,1)
              ++
              let dur = diffUTCTime c_t start_time
-             in ["duration: " ++ formatTime defaultTimeLocale "%H:%M:%S" dur]
+             in ["duration: " ++ formatTime defaultTimeLocale "%Hh %Mm %Ss" dur]
 #endif
