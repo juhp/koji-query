@@ -153,11 +153,14 @@ parseTaskState s =
   case lower s of
     "free" -> TaskFree
     "open" -> TaskOpen
+    "close" -> TaskClosed
     "closed" -> TaskClosed
+    "cancel" -> TaskCanceled
     "canceled" -> TaskCanceled
     "assigned" -> TaskAssigned
+    "fail" -> TaskFailed
     "failed" -> TaskFailed
-    _ -> error $! "unknown task state: " ++ s
+    _ -> error' $! "unknown task state: " ++ s
 #endif
 
 buildlogSize :: Manager -> Int -> IO ()
