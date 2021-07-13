@@ -1,8 +1,7 @@
 name:                koji-query
 version:             0.1.0
 synopsis:            Helpful koji queries
--- description:
---         Short paragraph here
+description: Friendly Koji task searching
 license:             BSD3
 license-file:        LICENSE
 author:              Jens Petersen <juhpetersen@gmail.com>
@@ -12,10 +11,10 @@ category:            Distribution
 homepage:            https://github.com/juhp/koji-query
 bug-reports:         https://github.com/juhp/koji-query/issues
 build-type:          Simple
---  extra-doc-files:     README.md
+extra-doc-files:     README.md
 --                       ChangeLog.md
 cabal-version:       2.0
---tested-with:         GHC == 8.4.4, GHC == 8.6.5, GHC == 8.8.4, GHC == 8.10.4
+tested-with:         GHC == 8.4.4, GHC == 8.6.5, GHC == 8.8.4, GHC == 8.10.4
 
 source-repository head
   type:                git
@@ -23,7 +22,7 @@ source-repository head
 
 executable koji-query
   main-is:             Main.hs
---  other-modules:       Paths_koji_query
+  other-modules:       Paths_koji_query
   hs-source-dirs:      src
   build-depends:       base < 5,
                        extra,

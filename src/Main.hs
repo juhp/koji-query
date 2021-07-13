@@ -17,9 +17,11 @@ import SimpleCmd
 import SimpleCmdArgs
 import System.FilePath
 
+import Paths_koji_query (version)
+
 main :: IO ()
 main =
-  simpleCmdArgs' Nothing "koji-query" "Helper client for koji queries" $
+  simpleCmdArgs' (Just version) "koji-query" "Helper client for koji queries" $
   program
   <$> optional (strOptionWith 'u' "user" "USER" "Koji user")
   <*> optionalWith auto 'l' "limit" "NUMTASKS" "Maximum number of tasks to show [default: 20]" 20
