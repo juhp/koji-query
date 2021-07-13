@@ -23,32 +23,48 @@ main =
   program
   <$> optional (strOptionWith 'u' "user" "USER" "Koji user")
   <*> optionalWith auto 'l' "limit" "NUMTASKS" "Maximum number of tasks to show [default: 20]" 20
+  <*> optional (optionWith auto 'p' "parent" "TASKID" "List children tasks")
+  <*> many (parseTaskState <$> strOptionWith 's' "state" "STATE" "Filter tasks by state")
   <*> many (strOptionWith 'a' "arch" "ARCH" "Task arch")
   <*> optional (strArg "DAY")
 
-program :: Maybe String -> Int -> [String] -> Maybe String -> IO ()
-program muser limit archs mdate = do
-  date <- cmd "date" ["+%F", "--date=" ++ fromMaybe "yesterday" mdate]
-  user <- case muser of
-            Just user -> return user
-            Nothing -> do
-              mfasid <- (dropSuffix "@FEDORAPROJECT.ORG" <$>) . find ("@FEDORAPROJECT.ORG" `isSuffixOf`) . words <$> cmd "klist" ["-l"]
-              case mfasid of
-                Just fas -> return fas
-                Nothing -> error' "Could not determine FAS id from klist"
-  mowner <- kojiGetUserID fedoraKojiHub user
+program :: Maybe String -> Int -> Maybe Int -> [TaskState] -> [String]
+        -> Maybe String
+        -> IO ()
+program muser limit mparent states archs mdate = do
   tz <- getCurrentTimeZone
-  case mowner of
-    Nothing -> error "No owner found"
-    Just owner -> do
+  case mparent of
+    Just parent -> do
+      when (isJust muser || isJust mdate) $
+        error' $ "cannot use --parent together with --user or date"
       listTasks fedoraKojiHub
-        ([--("method", ValueString "build"),
-         ("owner", ValueInt (getID owner)),
-         ("startedAfter", ValueString date),
-         ("decode", ValueBool True)]
-        ++ [("arch", ValueArray (map ValueString archs)) | notNull archs])
-        [("limit",ValueInt limit), ("order", ValueString "id")]
+        ([("parent", ValueInt parent),
+          ("decode", ValueBool True)]
+         ++ [("state", ValueArray (map taskStateToValue states)) | notNull states]
+         ++ [("arch", ValueArray (map ValueString archs)) | notNull archs])
+        [("order", ValueString "id")]
         >>= mapM_ (printTask tz)
+    Nothing -> do
+      date <- cmd "date" ["+%F", "--date=" ++ fromMaybe "yesterday" mdate]
+      user <- case muser of
+                Just user -> return user
+                Nothing -> do
+                  mfasid <- (dropSuffix "@FEDORAPROJECT.ORG" <$>) . find ("@FEDORAPROJECT.ORG" `isSuffixOf`) . words <$> cmd "klist" ["-l"]
+                  case mfasid of
+                    Just fas -> return fas
+                    Nothing -> error' "Could not determine FAS id from klist"
+      mowner <- kojiGetUserID fedoraKojiHub user
+      case mowner of
+        Nothing -> error "No owner found"
+        Just owner -> do
+          listTasks fedoraKojiHub
+            ([("owner", ValueInt (getID owner)),
+              ("startedAfter", ValueString date),
+              ("decode", ValueBool True)]
+             ++ [("state", ValueArray (map taskStateToValue states)) | notNull states]
+             ++ [("arch", ValueArray (map ValueString archs)) | notNull archs])
+            [("limit",ValueInt limit), ("order", ValueString "id")]
+            >>= mapM_ (printTask tz)
   where
     printTask :: TimeZone -> Struct -> IO ()
     printTask tz task = do
@@ -56,16 +72,16 @@ program muser limit archs mdate = do
       whenJust (taskLines task) $ mapM_ putStrLn . formatTaskResult tz
 
     formatTaskResult :: TimeZone -> TaskResult -> [String]
-    formatTaskResult tz (TaskResult title url start mcompletion) =
-      [ title
-      , url
-      , formatTime defaultTimeLocale "%c" (utcToLocalTime tz start)
+    formatTaskResult tz (TaskResult package method state mparent' taskid start mendtime) =
+      [ package +-+ method +-+ show state +-+ maybe "" (\p -> "(parent: " ++ show p ++ ")") mparent'
+      , "https://koji.fedoraproject.org/koji/taskinfo?taskID=" ++ show taskid
+      , formatTime defaultTimeLocale "%c (start)" (utcToLocalTime tz start)
       ]
       ++
-      case mcompletion of
+      case mendtime of
         Nothing -> []
         Just c_t ->
-          [formatTime defaultTimeLocale "%c" (utcToLocalTime tz c_t)]
+          [formatTime defaultTimeLocale "%c (end)" (utcToLocalTime tz c_t)]
 #if MIN_VERSION_time(1,9,1)
           ++
           let dur = diffUTCTime c_t start
@@ -79,7 +95,7 @@ program muser limit archs mdate = do
     taskLines st = do
       arch <- lookupStruct "arch" st
       start_time <- readTime' <$> lookupStruct "start_time" st
-      let mcompletion_time = readTime' <$> lookupStruct "completion_time" st
+      let mend_time = readTime' <$> lookupStruct "completion_time" st
       taskid <- lookupStruct "id" st
       method <- lookupStruct "method" st
       state <- getTaskState st
@@ -88,12 +104,34 @@ program muser limit archs mdate = do
             if method == "buildArch"
             then removeSuffix ".src.rpm" (takeFileName request) <.> arch
             else takeFileName request
-          parent = lookupStruct "parent" st :: Maybe Int
+          mparent' = lookupStruct "parent" st :: Maybe Int
       return $
-        TaskResult
-          (package +-+ method +-+ show state +-+ maybe "" show parent)
-          ("https://koji.fedoraproject.org/koji/taskinfo?taskID=" ++ show (taskid :: Int))
-          start_time
-          mcompletion_time
+        TaskResult package method state mparent' taskid start_time mend_time
 
-data TaskResult = TaskResult String String UTCTime (Maybe UTCTime)
+data TaskResult =
+  TaskResult {_taskPackage :: String,
+              _taskMethod :: String,
+              _taskState :: TaskState,
+              _mtaskParent :: Maybe Int,
+              _taskId :: Int,
+              _taskStartTime :: UTCTime,
+              _mtaskEndTime :: (Maybe UTCTime)
+             }
+
+----
+
+#if !MIN_VERSION_koji(0,0,3)
+taskStateToValue :: TaskState -> Value
+taskStateToValue = ValueInt . fromEnum
+
+parseTaskState :: String -> TaskState
+parseTaskState s =
+  case lower s of
+    "free" -> TaskFree
+    "open" -> TaskOpen
+    "closed" -> TaskClosed
+    "canceled" -> TaskCanceled
+    "assigned" -> TaskAssigned
+    "failed" -> TaskFailed
+    _ -> error $! "unknown task state: " ++ s
+#endif
