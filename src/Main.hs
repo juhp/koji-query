@@ -47,7 +47,7 @@ program muser limit mparent states archs mdate = do
         [("order", ValueString "id")]
         >>= mapM_ (printTask tz)
     Nothing -> do
-      date <- cmd "date" ["+%F", "--date=" ++ fromMaybe "yesterday" mdate]
+      date <- cmd "date" ["+%F", "--date=" ++ dateString mdate]
       user <- case muser of
                 Just user -> return user
                 Nothing -> do
@@ -68,6 +68,13 @@ program muser limit mparent states archs mdate = do
             [("limit",ValueInt limit), ("order", ValueString "id")]
             >>= mapM_ (printTask tz)
   where
+    dateString :: Maybe String -> String
+    dateString Nothing = "yesterday"
+    dateString (Just s) =
+      if s `elem` ["hour", "day", "week", "month", "year"]
+      then "last " ++ s
+      else s
+
     printTask :: TimeZone -> Struct -> IO ()
     printTask tz task = do
       putStrLn ""
