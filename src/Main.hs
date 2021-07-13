@@ -71,10 +71,15 @@ program muser limit mparent states archs mdate = do
     printTask :: TimeZone -> Struct -> IO ()
     printTask tz task = do
       putStrLn ""
-      whenJust (taskLines task) $ mapM_ putStrLn . formatTaskResult tz
+      whenJust (taskResult task) $ \ result -> do
+        let mendtime = mtaskEndTime result
+        time <- case mendtime of
+          Just end -> return end
+          Nothing -> getCurrentTime
+        (mapM_ putStrLn . formatTaskResult (isJust mendtime) tz) (result {mtaskEndTime = Just time})
 
-    formatTaskResult :: TimeZone -> TaskResult -> [String]
-    formatTaskResult tz (TaskResult package method state mparent' taskid start mendtime) =
+    formatTaskResult :: Bool -> TimeZone -> TaskResult -> [String]
+    formatTaskResult ended tz (TaskResult package method state mparent' taskid start mendtime) =
       [ package +-+ method +-+ show state +-+ maybe "" (\p -> "(parent: " ++ show p ++ ")") mparent'
       , "https://koji.fedoraproject.org/koji/taskinfo?taskID=" ++ show taskid
       , formatTime defaultTimeLocale "%c (start)" (utcToLocalTime tz start)
@@ -82,19 +87,19 @@ program muser limit mparent states archs mdate = do
       ++
       case mendtime of
         Nothing -> []
-        Just c_t ->
-          [formatTime defaultTimeLocale "%c (end)" (utcToLocalTime tz c_t)]
+        Just end ->
+          [formatTime defaultTimeLocale "%c (end)" (utcToLocalTime tz end) | ended]
 #if MIN_VERSION_time(1,9,1)
           ++
-          let dur = diffUTCTime c_t start
-          in ["duration: " ++ formatTime defaultTimeLocale "%Hh %Mm %Ss" dur]
+          let dur = diffUTCTime end start
+          in [(if not ended then "current " else "") ++ "duration: " ++ formatTime defaultTimeLocale "%Hh %Mm %Ss" dur]
 #endif
 
     readTime' :: String -> UTCTime
     readTime' = read . replace "+00:00" "Z"
 
-    taskLines :: Struct -> Maybe TaskResult
-    taskLines st = do
+    taskResult :: Struct -> Maybe TaskResult
+    taskResult st = do
       arch <- lookupStruct "arch" st
       start_time <- readTime' <$> lookupStruct "start_time" st
       let mend_time = readTime' <$> lookupStruct "completion_time" st
@@ -117,7 +122,7 @@ data TaskResult =
               _mtaskParent :: Maybe Int,
               _taskId :: Int,
               _taskStartTime :: UTCTime,
-              _mtaskEndTime :: (Maybe UTCTime)
+              mtaskEndTime :: (Maybe UTCTime)
              }
 
 ----
