@@ -8,17 +8,25 @@ import Control.Monad.Extra
 
 import Data.List.Extra
 import Data.Maybe
+#if !MIN_VERSION_base(4,11,0)
+import Data.Monoid ((<>))
+#endif
+import qualified Data.Text as T
+import qualified Data.Text.IO as T
+import Data.Text.Format.Numbers
 import Data.Time.Clock
 import Data.Time.Format
 import Data.Time.LocalTime
 import Distribution.Koji
 import Distribution.Koji.API
+import Network.HTTP.Directory
 import SimpleCmd
 import SimpleCmdArgs
 import System.FilePath
 
 import Paths_koji_query (version)
 
+-- FIXME query a taskid!
 main :: IO ()
 main =
   simpleCmdArgs' (Just version) "koji-query" "Helper client for koji queries" $
@@ -35,6 +43,7 @@ program :: Maybe String -> Int -> Maybe Int -> [TaskState] -> [String]
         -> IO ()
 program muser limit mparent states archs mdate = do
   tz <- getCurrentTimeZone
+  mgr <- httpManager
   case mparent of
     Just parent -> do
       when (isJust muser || isJust mdate) $
@@ -45,7 +54,7 @@ program muser limit mparent states archs mdate = do
          ++ [("state", ValueArray (map taskStateToValue states)) | notNull states]
          ++ [("arch", ValueArray (map ValueString archs)) | notNull archs])
         [("order", ValueString "id")]
-        >>= mapM_ (printTask tz)
+        >>= mapM_ (printTask mgr tz)
     Nothing -> do
       date <- cmd "date" ["+%F", "--date=" ++ dateString mdate]
       user <- case muser of
@@ -66,7 +75,7 @@ program muser limit mparent states archs mdate = do
              ++ [("state", ValueArray (map taskStateToValue states)) | notNull states]
              ++ [("arch", ValueArray (map ValueString archs)) | notNull archs])
             [("limit",ValueInt limit), ("order", ValueString "id")]
-            >>= mapM_ (printTask tz)
+            >>= mapM_ (printTask mgr tz)
   where
     dateString :: Maybe String -> String
     dateString Nothing = "yesterday"
@@ -75,8 +84,8 @@ program muser limit mparent states archs mdate = do
       then "last " ++ s
       else s
 
-    printTask :: TimeZone -> Struct -> IO ()
-    printTask tz task = do
+    printTask :: Manager -> TimeZone -> Struct -> IO ()
+    printTask mgr tz task = do
       putStrLn ""
       whenJust (taskResult task) $ \ result -> do
         let mendtime = mtaskEndTime result
@@ -84,6 +93,7 @@ program muser limit mparent states archs mdate = do
           Just end -> return end
           Nothing -> getCurrentTime
         (mapM_ putStrLn . formatTaskResult (isJust mendtime) tz) (result {mtaskEndTime = Just time})
+        buildlogSize mgr (taskId result)
 
     formatTaskResult :: Bool -> TimeZone -> TaskResult -> [String]
     formatTaskResult ended tz (TaskResult package method state mparent' taskid start mendtime) =
@@ -127,7 +137,7 @@ data TaskResult =
               _taskMethod :: String,
               _taskState :: TaskState,
               _mtaskParent :: Maybe Int,
-              _taskId :: Int,
+              taskId :: Int,
               _taskStartTime :: UTCTime,
               mtaskEndTime :: (Maybe UTCTime)
              }
@@ -149,3 +159,28 @@ parseTaskState s =
     "failed" -> TaskFailed
     _ -> error $! "unknown task state: " ++ s
 #endif
+
+buildlogSize :: Manager -> Int -> IO ()
+buildlogSize mgr taskid = do
+  exists <- httpExists mgr buildlog
+  when exists $ do
+    putStr $ buildlog ++ " "
+    msize <- httpFileSize mgr buildlog
+    whenJust msize $ \size -> do
+      putStr "("
+      (T.putStr . kiloBytes) size
+      putStrLn ")"
+      -- FIXME if too small show root.log instead
+      putStrLn logtail
+  where
+    tid = show taskid
+
+    buildlog = "https://kojipkgs.fedoraproject.org/work/tasks" </> lastFew </> tid </> "build.log"
+
+    lastFew =
+      let few = dropWhile (== '0') $ drop 4 tid in
+        if null few then "0" else few
+
+    kiloBytes s = prettyI (Just ',') (fromInteger s `div` 1000) <> T.pack "kB"
+
+    logtail = "https://koji.fedoraproject.org/koji/getfile?taskID=" ++ tid ++ "&name=build.log&offset=-4000"

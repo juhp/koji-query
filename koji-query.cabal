@@ -27,9 +27,12 @@ executable koji-query
   build-depends:       base < 5,
                        extra,
                        filepath,
+                       format-numbers,
+                       http-directory,
                        koji,
                        simple-cmd,
                        simple-cmd-args,
+                       text,
                        time
   default-language:    Haskell2010
   ghc-options:         -Wall -threaded
