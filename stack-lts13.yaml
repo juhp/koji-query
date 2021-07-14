@@ -5,3 +5,4 @@ extra-deps:
   - haxr-3000.11.4
   - koji-0.0.1
   - simple-cmd-args-0.1.4
+  - rpm-nvr-0.1.0

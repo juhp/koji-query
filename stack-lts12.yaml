@@ -8,3 +8,4 @@ extra-deps:
   - simple-cmd-args-0.1.4
   - simple-cmd-0.1.4
   - http-directory-0.1.5
+  - rpm-nvr-0.1.0

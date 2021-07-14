@@ -30,6 +30,7 @@ executable koji-query
                        format-numbers,
                        http-directory,
                        koji,
+                       rpm-nvr,
                        simple-cmd,
                        simple-cmd-args,
                        text,
