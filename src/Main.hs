@@ -29,6 +29,8 @@ import Paths_koji_query (version)
 
 data TaskIdReq = Task Int | Parent Int | TaskQuery
 
+data TaskFilter = TaskPackage String | TaskNVR String
+
 main :: IO ()
 main =
   simpleCmdArgs' (Just version) "koji-query"
@@ -44,15 +46,18 @@ main =
   <*> many (strOptionWith 'a' "arch" "ARCH" "Task arch")
   <*> optional (strOptionWith 'd' "date" "DAY" "Tasks started after date [default: yesterday]")
   <*> optional (strOptionWith 'm' "method" "METHOD" "Select tasks by method: [build,buildarch,etc]")
-  <*> optional (strOptionWith 'p' "package" "PKG" "Filter results to specified package")
+  <*> optional (TaskPackage <$> strOptionWith 'p' "package" "PKG" "Filter results to specified package"
+               <|> TaskNVR <$> strOptionWith 'n' "nvr" "PREFIX" "Filter results by NVR prefix")
 program :: String -> Maybe String -> Int -> TaskIdReq -> [TaskState]
-        -> [String] -> Maybe String -> Maybe String -> Maybe String
+        -> [String] -> Maybe String -> Maybe String -> Maybe TaskFilter
         -> IO ()
-program server muser limit taskreq states archs mdate mmethod mpkg = do
+program server muser limit taskreq states archs mdate mmethod mfilter' = do
   tz <- getCurrentTimeZone
   mgr <- httpManager
   case taskreq of
     Task taskid -> do
+      when (isJust muser || isJust mdate || isJust mfilter') $
+        error' "cannot use --task together with --user, --date, or filter"
       mtask <- kojiGetTaskInfo server (TaskId taskid)
       whenJust mtask
         $ \task -> whenJust (maybeTaskResult task)
@@ -67,12 +72,13 @@ program server muser limit taskreq states archs mdate mmethod mpkg = do
       case taskreq of
         Task _ -> error' "reachable task request"
         Parent parent -> do
-          when (isJust muser || isJust mdate || isJust mpkg) $
-            error' "cannot use --parent together with --user, --date, or --package"
+          when (isJust muser || isJust mdate || isJust mfilter') $
+            error' "cannot use --parent together with --user, --date, or filter"
           return $
             ("parent", ValueInt parent) : commonParams
         TaskQuery -> do
           date <- cmd "date" ["+%F", "--date=" ++ dateString mdate]
+          putStrLn $ "since " ++ date
           user <- case muser of
                     Just user -> return user
                     Nothing -> do
@@ -124,9 +130,12 @@ program server muser limit taskreq states archs mdate mmethod mpkg = do
 
     filterResults :: [TaskResult] -> [TaskResult]
     filterResults ts =
-      case mpkg of
+      case mfilter' of
         Nothing -> ts
-        Just pkg -> filter (isPackage pkg . taskNVR) ts
+        Just (TaskPackage pkg) ->
+          filter (isPackage pkg . taskNVR) ts
+        Just (TaskNVR nvr) ->
+          filter ((nvr `isPrefixOf`) . showNVR . taskNVR) ts
       where
         isPackage pkg (NVR n _) = n == pkg
 
