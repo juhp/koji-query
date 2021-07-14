@@ -1,11 +1,13 @@
 # koji-query
 
-Currently only supports listing one's recent Fedora Koji build tasks.
+A small cli tool to help locate Koji tasks.
 
-Rather similar to `koji list-tasks --quiet --mine --after=yesterday --all`
-except it print the url to kojiweb.
+Similar to `koji list-tasks --mine --quiet --all ...`,
+but it shows duration kojiweb urls and build.log size,
+and it uses `date` to parse a specified date string
+and can filter results by package.
 
-Later I may merge in other mini-projects like koji-progress and
+Later I might merge in other mini-projects like koji-progress and
 koji-buildlog-sizes (possibly even koji-install).
 
 ## Installation
@@ -45,4 +47,10 @@ Available options:
   -d,--date DAY            Tasks started after date [default: yesterday]
   -m,--method METHOD       Select tasks by method: [build,buildarch,etc]
   -p,--package PKG         Filter results to specified package
+```
+
+Example:
+
+```
+$ koji-query -a aarch64 -d "last week" -s fail
 ```
