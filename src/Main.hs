@@ -6,6 +6,7 @@ module Main (main) where
 
 import Control.Monad.Extra
 
+import Data.Char (isDigit)
 import Data.List.Extra
 import Data.Maybe
 #if !MIN_VERSION_base(4,11,0)
@@ -114,10 +115,14 @@ program server muser limit taskreq states archs mdate mmethod debug mfilter' = d
 
     dateString :: Maybe String -> String
     dateString Nothing = "yesterday"
+    -- make time refer to past not future
     dateString (Just s) =
-      if s `elem` ["hour", "day", "week", "month", "year"]
-      then "last " ++ s
-      else s
+      case words s of
+        [t] -> if t `elem` ["hour", "day", "week", "month", "year"]
+               then "last " ++ s
+               else t
+        [n,_unit] | all isDigit n -> s ++ " ago"
+        _ -> s
 
     maybeTaskResult :: Struct -> Maybe TaskResult
     maybeTaskResult st = do
