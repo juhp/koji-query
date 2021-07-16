@@ -119,15 +119,17 @@ program server muser limit taskreq states archs mdate mmethod debug mfilter' = d
       let mend_time = readTime' <$> lookupStruct "completion_time" st
       taskid <- lookupStruct "id" st
       method <- lookupStruct "method" st
+      hostid <- lookupStruct "host_id" st
       state <- getTaskState st
       request <- lookupStruct "request" st >>= getString . head
-      let nvr =
+      let package =
             if method == "buildArch"
-            then removeSuffix ".src.rpm" (takeFileName request)
-            else takeFileName request
+            then Right $ readNVR
+                 $ removeSuffix ".src.rpm" $ takeFileName request
+            else Left $ takeFileName request
           mparent' = lookupStruct "parent" st :: Maybe Int
       return $
-        TaskResult (readNVR nvr) arch method state mparent' taskid start_time mend_time
+        TaskResult package arch method hostid state mparent' taskid start_time mend_time
       where
         readTime' :: String -> UTCTime
         readTime' = read . replace "+00:00" "Z"
@@ -137,11 +139,15 @@ program server muser limit taskreq states archs mdate mmethod debug mfilter' = d
       case mfilter' of
         Nothing -> ts
         Just (TaskPackage pkg) ->
-          filter (isPackage pkg . taskNVR) ts
+          filter (isPackage pkg . taskPackage) ts
         Just (TaskNVR nvr) ->
-          filter ((nvr `isPrefixOf`) . showNVR . taskNVR) ts
+          filter (isNVR nvr . taskPackage) ts
       where
-        isPackage pkg (NVR n _) = n == pkg
+        isPackage pkg (Left p) = takeBaseName p == pkg
+        isPackage pkg (Right (NVR n _)) = n == pkg
+
+        isNVR _ (Left _) = False
+        isNVR nvr (Right nvr') = nvr `isPrefixOf` showNVR nvr'
 
     printTask :: Manager -> TimeZone -> TaskResult -> IO ()
     printTask mgr tz task = do
@@ -160,8 +166,8 @@ program server muser limit taskreq states archs mdate mmethod debug mfilter' = d
 #endif
 
 formatTaskResult :: Bool -> TimeZone -> TaskResult -> [String]
-formatTaskResult ended tz (TaskResult nvr arch method state mparent taskid start mendtime) =
-  [ showNVR nvr +-+ arch +-+ method +-+ show state +-+ maybe "" (\p -> "(parent: " ++ show p ++ ")") mparent
+formatTaskResult ended tz (TaskResult pkg arch method _hostid state mparent taskid start mendtime) =
+  [ showPackage pkg +-+ arch +-+ method +-+ show state +-+ maybe "" (\p -> "(parent: " ++ show p ++ ")") mparent
   , "https://koji.fedoraproject.org/koji/taskinfo?taskID=" ++ show taskid
   , formatTime defaultTimeLocale "%c (start)" (utcToLocalTime tz start)
   ]
@@ -175,20 +181,22 @@ formatTaskResult ended tz (TaskResult nvr arch method state mparent taskid start
       let dur = diffUTCTime end start
       in [(if not ended then "current " else "") ++ "duration: " ++ formatTime defaultTimeLocale "%Hh %Mm %Ss" dur]
 #endif
-
+  where
+    showPackage :: Either String NVR -> String
+    showPackage (Left p) = p
+    showPackage (Right nvr) = showNVR nvr
 
 data TaskResult =
-  TaskResult {taskNVR :: NVR,
+  TaskResult {taskPackage :: Either String NVR,
               _taskArch :: String,
               _taskMethod :: String,
+              _taskHostId :: Int,
               _taskState :: TaskState,
               _mtaskParent :: Maybe Int,
               taskId :: Int,
               _taskStartTime :: UTCTime,
               mtaskEndTime :: Maybe UTCTime
              }
-
-----
 
 #if !MIN_VERSION_koji(0,0,3)
 taskStateToValue :: TaskState -> Value
