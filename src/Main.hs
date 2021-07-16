@@ -46,10 +46,17 @@ main =
   <*> many (parseTaskState <$> strOptionWith 's' "state" "STATE" "Filter tasks by state")
   <*> many (strOptionWith 'a' "arch" "ARCH" "Task arch")
   <*> optional (strOptionWith 'd' "date" "DAY" "Tasks started after date [default: yesterday]")
-  <*> optional (strOptionWith 'm' "method" "METHOD" "Select tasks by method: [build,buildarch,etc]")
+  <*> (fmap normalizeMethod <$> optional (strOptionWith 'm' "method" "METHOD" "Select tasks by method: [build,buildarch,etc]"))
   <*> switchWith 'D' "debug" "Pretty-pretty raw XML result"
   <*> optional (TaskPackage <$> strOptionWith 'p' "package" "PKG" "Filter results to specified package"
                <|> TaskNVR <$> strOptionWith 'n' "nvr" "PREFIX" "Filter results by NVR prefix")
+  where
+    normalizeMethod :: String -> String
+    normalizeMethod m =
+      case elemIndex (lower m) (map lower kojiMethods) of
+        Just i -> kojiMethods !! i
+        Nothing -> error' $! "unknown method: " ++ m
+
 program :: String -> Maybe String -> Int -> TaskIdReq -> [TaskState]
         -> [String] -> Maybe String -> Maybe String -> Bool
         -> Maybe TaskFilter
@@ -241,3 +248,35 @@ buildlogSize mgr taskid = do
     kiloBytes s = prettyI (Just ',') (fromInteger s `div` 1000) <> T.pack "kB"
 
     logtail = "https://koji.fedoraproject.org/koji/getfile?taskID=" ++ tid ++ "&name=build.log&offset=-4000"
+
+kojiMethods :: [String]
+kojiMethods =
+  ["build",
+   "buildSRPMFromSCM",
+   "rebuildSRPM",
+   "buildArch",
+   "chainbuild",
+   "maven",
+   "buildMaven",
+   "chainmaven",
+   "wrapperRPM",
+   "winbuild",
+   "vmExec",
+   "waitrepo",
+   "tagBuild",
+   "newRepo",
+   "createrepo",
+   "distRepo",
+   "createdistrepo",
+   "buildNotification",
+   "tagNotification",
+   "dependantTask",
+   "livecd",
+   "createLiveCD",
+   "appliance",
+   "createAppliance",
+   "image",
+   "indirectionimage",
+   "createImage",
+   "livemedia",
+   "createLiveMedia"]
