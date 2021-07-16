@@ -24,6 +24,7 @@ import Network.HTTP.Directory
 import SimpleCmd
 import SimpleCmdArgs
 import System.FilePath
+import Text.Pretty.Simple
 
 import Paths_koji_query (version)
 
@@ -46,12 +47,14 @@ main =
   <*> many (strOptionWith 'a' "arch" "ARCH" "Task arch")
   <*> optional (strOptionWith 'd' "date" "DAY" "Tasks started after date [default: yesterday]")
   <*> optional (strOptionWith 'm' "method" "METHOD" "Select tasks by method: [build,buildarch,etc]")
+  <*> switchWith 'D' "debug" "Pretty-pretty raw XML result"
   <*> optional (TaskPackage <$> strOptionWith 'p' "package" "PKG" "Filter results to specified package"
                <|> TaskNVR <$> strOptionWith 'n' "nvr" "PREFIX" "Filter results by NVR prefix")
 program :: String -> Maybe String -> Int -> TaskIdReq -> [TaskState]
-        -> [String] -> Maybe String -> Maybe String -> Maybe TaskFilter
+        -> [String] -> Maybe String -> Maybe String -> Bool
+        -> Maybe TaskFilter
         -> IO ()
-program server muser limit taskreq states archs mdate mmethod mfilter' = do
+program server muser limit taskreq states archs mdate mmethod debug mfilter' = do
   tz <- getCurrentTimeZone
   mgr <- httpManager
   case taskreq of
@@ -59,13 +62,14 @@ program server muser limit taskreq states archs mdate mmethod mfilter' = do
       when (isJust muser || isJust mdate || isJust mfilter') $
         error' "cannot use --task together with --user, --date, or filter"
       mtask <- kojiGetTaskInfo server (TaskId taskid)
-      whenJust mtask
-        $ \task -> whenJust (maybeTaskResult task)
-                   $ printTask mgr tz
+      whenJust mtask$ \task -> do
+        when debug $ pPrintCompact task
+        whenJust (maybeTaskResult task) $ printTask mgr tz
     _ -> do
       query <- setupQuery
       results <- listTasks server query
                  [("limit",ValueInt limit), ("order", ValueString "id")]
+      when debug $ mapM_ pPrintCompact results
       (mapM_ (printTask mgr tz) . filterResults . mapMaybe maybeTaskResult) results
   where
     setupQuery = do
@@ -146,6 +150,14 @@ program server muser limit taskreq states archs mdate mmethod mfilter' = do
       time <- maybe getCurrentTime return mendtime
       (mapM_ putStrLn . formatTaskResult (isJust mendtime) tz) (task {mtaskEndTime = Just time})
       buildlogSize mgr (taskId task)
+
+    pPrintCompact =
+#if MIN_VERSION_pretty_simple(4,0,0)
+      pPrintOpt CheckColorTty
+      (defaultOutputOptionsDarkBg {outputOptionsCompact = True})
+#else
+      pPrint
+#endif
 
 formatTaskResult :: Bool -> TimeZone -> TaskResult -> [String]
 formatTaskResult ended tz (TaskResult nvr arch method state mparent taskid start mendtime) =
