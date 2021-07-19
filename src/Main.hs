@@ -29,7 +29,7 @@ import Text.Pretty.Simple
 
 import Paths_koji_query (version)
 
-data TaskIdReq = Task Int | Parent Int | TaskQuery
+data TaskReq = Task Int | Parent Int | Build String | TaskQuery
 
 data TaskFilter = TaskPackage String | TaskNVR String
 
@@ -42,13 +42,15 @@ main =
   <*> optional (strOptionWith 'u' "user" "USER" "Koji user")
   <*> optionalWith auto 'l' "limit" "INT" "Maximum number of tasks to show [default: 20]" 20
   <*> (Task <$> optionWith auto 't' "task" "TASKID" "Show task"
-       <|> Parent <$> optionWith auto 'P' "parent" "TASKID" "List children tasks"
+       <|> Parent <$> optionWith auto 'c' "children" "TASKID" "List child tasks of parent"
+       <|> Build <$> strOptionWith 'b' "build" "BUILD" "List child tasks of build"
        <|> pure TaskQuery)
   <*> many (parseTaskState <$> strOptionWith 's' "state" "STATE" "Filter tasks by state")
   <*> many (strOptionWith 'a' "arch" "ARCH" "Task arch")
   <*> optional (strOptionWith 'd' "date" "DAY" "Tasks started after date [default: yesterday]")
   <*> (fmap normalizeMethod <$> optional (strOptionWith 'm' "method" "METHOD" "Select tasks by method: [build,buildarch,etc]"))
   <*> switchWith 'D' "debug" "Pretty-pretty raw XML result"
+  -- FIXME error if integer (eg mistakenly taskid)
   <*> optional (TaskPackage <$> strOptionWith 'p' "package" "PKG" "Filter results to specified package"
                <|> TaskNVR <$> strOptionWith 'n' "nvr" "PREFIX" "Filter results by NVR prefix")
   where
@@ -58,7 +60,7 @@ main =
         Just i -> kojiMethods !! i
         Nothing -> error' $! "unknown method: " ++ m
 
-program :: String -> Maybe String -> Int -> TaskIdReq -> [TaskState]
+program :: String -> Maybe String -> Int -> TaskReq -> [TaskState]
         -> [String] -> Maybe String -> Maybe String -> Bool
         -> Maybe TaskFilter
         -> IO ()
@@ -73,6 +75,14 @@ program server muser limit taskreq states archs mdate mmethod debug mfilter' = d
       whenJust mtask$ \task -> do
         when debug $ pPrintCompact task
         whenJust (maybeTaskResult task) $ printTask mgr tz
+    Build bld -> do
+      when (isJust mdate || isJust mfilter') $
+        error' "cannot use --task together with --date or filter"
+      mtaskid <- if all isDigit bld
+                then ((fmap TaskId . lookupStruct "task_id") =<<) <$> getBuild server (InfoID (read bld))
+                else kojiGetBuildTaskID server bld
+      whenJust mtaskid $ \(TaskId taskid) ->
+        program server muser limit (Parent taskid) states archs mdate mmethod debug mfilter'
     _ -> do
       query <- setupQuery
       results <- listTasks server query
@@ -82,7 +92,9 @@ program server muser limit taskreq states archs mdate mmethod debug mfilter' = d
   where
     setupQuery = do
       case taskreq of
-        Task _ -> error' "reachable task request"
+        -- FIXME:
+        Task _ -> error' "unreachable task request"
+        Build _ -> error' "unreachable build request"
         Parent parent -> do
           when (isJust muser || isJust mdate || isJust mfilter') $
             error' "cannot use --parent together with --user, --date, or filter"
