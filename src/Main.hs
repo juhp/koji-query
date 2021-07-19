@@ -33,13 +33,14 @@ data TaskReq = Task Int | Parent Int | Build String | TaskQuery
 
 data TaskFilter = TaskPackage String | TaskNVR String
 
+-- FIXME option for ordering
 main :: IO ()
 main =
   simpleCmdArgs' (Just version) "koji-query"
   "Helper client for koji queries: https://github.com/juhp/koji-query" $
   program
   <$> strOptionalWith 'S' "server" "URL" "Koji Hub [default: Fedora]" fedoraKojiHub
-  <*> optional (strOptionWith 'u' "user" "USER" "Koji user")
+  <*> optional (strOptionWith 'u' "user" "USER" "Koji user [default: fasid]")
   <*> optionalWith auto 'l' "limit" "INT" "Maximum number of tasks to show [default: 20]" 20
   <*> (Task <$> optionWith auto 't' "task" "TASKID" "Show task"
        <|> Parent <$> optionWith auto 'c' "children" "TASKID" "List child tasks of parent"
