@@ -192,7 +192,7 @@ program server muser limit taskreq states archs mdate mmethod debug mfilter' = d
 
 formatTaskResult :: Bool -> TimeZone -> TaskResult -> [String]
 formatTaskResult ended tz (TaskResult pkg arch method _hostid state mparent taskid start mendtime) =
-  [ showPackage pkg +-+ (if method == "buildArch" then arch else "") +-+ method +-+ show state
+  [ showPackage pkg +-+ (if method == "buildArch" then arch else method) +-+ show state
   , "https://koji.fedoraproject.org/koji/taskinfo?taskID=" ++ show taskid +-+ maybe "" (\p -> "(parent: " ++ show p ++ ")") mparent
   , formatTime defaultTimeLocale "%c (start)" (utcToLocalTime tz start)
   ]
