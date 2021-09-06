@@ -148,10 +148,10 @@ program server muser limit taskreq states archs mdate mmethod debug mfilter' = d
       state <- getTaskState st
       request <- lookupStruct "request" st >>= getString . head
       let package =
-            if method == "buildArch"
-            then Right $ readNVR
-                 $ removeSuffix ".src.rpm" $ takeFileName request
-            else Left $ takeFileName request
+            let file = takeFileName request
+            in if ".src.rpm" `isSuffixOf` file
+               then Right $ readNVR $ removeSuffix ".src.rpm" file
+               else Left $ takeBaseName file
           mparent' = lookupStruct "parent" st :: Maybe Int
       return $
         TaskResult package arch method hostid state mparent' taskid start_time mend_time
